@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: odin-postgres
+    environment:
+      POSTGRES_DB: odin
+      POSTGRES_USER: odin
+      POSTGRES_PASSWORD: odin
+    ports:
+      - "5432:5432"
+    volumes:
+      - odin_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odin -d odin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ODIN_DATABASE_URL: postgresql+psycopg://odin:odin@postgres:5432/odin
+      ODIN_CORS_ORIGINS: http://localhost:3000
+      ODIN_DATA_DIR: /app/datasets/dataset_processed
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >-
+      sh -c "alembic upgrade head &&
+      python -m odin.cli --include-tags &&
+      uvicorn odin.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  odin_postgres_data:

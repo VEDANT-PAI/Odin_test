@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+**/__pycache__
+**/.pytest_cache
+frontend/node_modules
+frontend/.next
+notebook
+*.ipynb
+datasets/dataset_raw
+datasets/goodreadsbooks_raw
+datasets/metadata_dataset_raw
+datasets/dataset_processed/*.bak
+

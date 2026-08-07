@@ -1,0 +1,55 @@
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class TagResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class BookSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    authors: str
+    average_rating: float
+    ratings_count: int
+    image_url: str | None = None
+    small_image_url: str | None = None
+    publication_year: float | None = None
+
+
+class BookDetail(BookSummary):
+    original_title: str | None = None
+    language_code: str | None = None
+    isbn: str | None = None
+    tags: list[TagResponse] = Field(default_factory=list)
+
+
+class PaginatedBooks(BaseModel):
+    items: list[BookSummary]
+    page: int
+    limit: int
+    total: int
+
+
+class RecommendationResponse(BaseModel):
+    items: list[BookSummary]
+    strategy: str
+
+
+class GenreRecommendationRequest(BaseModel):
+    genres: list[str] = Field(min_length=1, max_length=6)
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class UserBookRating(BaseModel):
+    book_id: int = Field(gt=0)
+    rating: int = Field(ge=1, le=5)
+
+
+class RatingsRecommendationRequest(BaseModel):
+    ratings: list[UserBookRating] = Field(min_length=1, max_length=10)
+    limit: int = Field(default=5, ge=1, le=20)

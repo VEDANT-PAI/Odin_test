@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     llm_url: str = "http://localhost:11434"
     llm_model: str = "qwen2.5:3b"
     llm_timeout: float = 90.0
+    llm_bearer_token: str = ""  # sent as `Authorization: Bearer ...` to Ollama; empty = no header (local dev)
     cors_origins: str = "http://localhost:3001"
     openlibrary_url: str = "https://openlibrary.org"
     openlibrary_timeout: float = 8.0

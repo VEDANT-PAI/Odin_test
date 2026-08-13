@@ -22,6 +22,14 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     app.state.retriever = OpenLibraryRetriever(settings)
     app.state.ollama = OllamaClient(settings)
+    ollama_ok, ollama_models = await app.state.ollama.status()
+    logger.info(
+        "startup llm_url=%s llm_model=%s ollama_available=%s models=%s",
+        settings.llm_url,
+        settings.llm_model,
+        ollama_ok,
+        ollama_models,
+    )
     yield
     await app.state.retriever.close()
 

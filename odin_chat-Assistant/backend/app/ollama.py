@@ -33,9 +33,13 @@ class OllamaClient:
     def __init__(self, settings: Settings):
         self.settings = settings
 
+    def _auth_headers(self) -> dict[str, str]:
+        token = (self.settings.llm_bearer_token or "").strip()
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     async def status(self) -> tuple[bool, list[str]]:
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with httpx.AsyncClient(timeout=5, headers=self._auth_headers()) as client:
                 response = await client.get(f"{self.settings.llm_url.rstrip('/')}/api/tags")
                 response.raise_for_status()
                 names = [str(model.get("name")) for model in response.json().get("models", []) if isinstance(model, dict)]
@@ -52,7 +56,7 @@ class OllamaClient:
             "options": {"temperature": 0.3, "num_predict": self.settings.max_output_tokens},
         }
         timeout = httpx.Timeout(self.settings.llm_timeout, connect=5)
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, headers=self._auth_headers()) as client:
             async with client.stream("POST", f"{self.settings.llm_url.rstrip('/')}/api/chat", json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():

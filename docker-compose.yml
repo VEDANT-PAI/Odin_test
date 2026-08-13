@@ -24,11 +24,17 @@ services:
       ODIN_DATABASE_URL: postgresql+psycopg://odin:odin@postgres:5432/odin
       ODIN_CORS_ORIGINS: http://localhost:3000
       ODIN_DATA_DIR: /app/datasets/dataset_processed
+      ODIN_LLM_ENABLED: ${ODIN_LLM_ENABLED:-true}
+      ODIN_LLM_URL: ${ODIN_LLM_URL:-http://host.docker.internal:11434}
+      ODIN_LLM_MODEL: ${ODIN_LLM_MODEL:-qwen3:0.6b}
+      ODIN_LLM_TIMEOUT: ${ODIN_LLM_TIMEOUT:-30}
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >-
       sh -c "alembic upgrade head &&
       python -m odin.cli --include-tags &&

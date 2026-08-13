@@ -17,6 +17,16 @@ export type Book = {
 
 export type BookPage = { items: Book[]; page: number; limit: number; total: number };
 
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ChatRecommendation = Book;
+export type ChatResponse = {
+  message: string;
+  recommendations: ChatRecommendation[];
+  intent: string;
+  strategy: string;
+  llm_used: boolean;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 export async function getBooks(query = "", limit = 12): Promise<BookPage> {
@@ -64,4 +74,14 @@ export function getGenreRecommendations(genres: string[]): Promise<Book[]> {
 
 export function getRatingsRecommendations(ratings: { book_id: number; rating: number }[]): Promise<Book[]> {
   return recommendationRequest("ratings", { ratings, limit: 5 });
+}
+
+export async function chat(message: string, history: ChatMessage[]): Promise<ChatResponse> {
+  const response = await fetch(`${API_URL}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history: history.slice(-8) }),
+  });
+  if (!response.ok) throw new Error("The reading companion is currently unavailable.");
+  return response.json();
 }

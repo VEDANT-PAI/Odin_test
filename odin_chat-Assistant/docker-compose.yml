@@ -1,0 +1,19 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      ODIN_CHAT_LLM_URL: ${ODIN_CHAT_LLM_URL:-http://host.docker.internal:11434}
+      ODIN_CHAT_LLM_MODEL: ${ODIN_CHAT_LLM_MODEL:-qwen2.5:3b}
+      ODIN_CHAT_CORS_ORIGINS: ${ODIN_CHAT_CORS_ORIGINS:-http://localhost:3001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8010:8010"
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_ODIN_CHAT_API_URL: ${NEXT_PUBLIC_ODIN_CHAT_API_URL:-http://localhost:8010}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - api

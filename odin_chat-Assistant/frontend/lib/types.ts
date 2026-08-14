@@ -18,6 +18,7 @@ export type Message = {
   citations?: Citation[];
   createdAt: number;
   error?: boolean;
+  thinking?: string;
 };
 
 export type Conversation = {

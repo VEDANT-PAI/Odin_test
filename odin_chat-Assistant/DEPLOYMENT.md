@@ -2,75 +2,72 @@
 
 ## Overview
 
-Deploy the Odin Chat Assistant to a public URL for free while keeping the LLM on your laptop.
+Deploy the Odin Chat Assistant to a public URL for free while keeping the LLM running on your local machine.
 
 **Architecture:**
 - **Frontend** → Vercel (Hobby tier, free)
 - **Backend** → Render (Free Web Service)
-- **LLM** → Ollama on your laptop
-- **Laptop → Internet** → Cloudflare Tunnel with bearer token auth
+- **LLM & Embeddings** → Ollama on your local machine
+- **Local Machine → Internet** → Cloudflare Tunnel (Free tier)
 
-All layers are free: Vercel Hobby, Render free web service, Cloudflare Tunnel free tier, Ollama on your hardware, no paid APIs.
+All layers are free: Vercel Hobby, Render free web service, Cloudflare Tunnel free tier, Ollama on your local hardware, and public Open Library APIs.
 
 ---
 
 ## Prerequisites
 
-- GitHub repo with this code pushed
+- GitHub repository with your Odin Chat Assistant code pushed
 - Free accounts: [Render](https://render.com), [Vercel](https://vercel.com), [Cloudflare](https://cloudflare.com)
-- A domain on Cloudflare (for named tunnel) — optional, can use quick tunnel instead
-- `ollama serve` running locally with `qwen3:0.6b` pulled
+- `ollama serve` running locally with your chosen model (e.g. `qwen2.5:3b`, `qwen3:0.6b`, `qwen3:4b`) and embedding model (`nomic-embed-text`)
+- Optional: A domain registered or active on Cloudflare (needed for a persistent Named Tunnel; Quick Tunnels do not require a domain)
 
 ---
 
-## 1. Generate Bearer Token (Do This First)
+## 1. Security & Tokens
 
-```bash
-openssl rand -hex 32
-```
-
-Save this token — you'll use it in **three places**:
-1. Render env var `ODIN_CHAT_LLM_BEARER_TOKEN` (mark as Secret)
-2. Cloudflare Tunnel `--bearer-token` flag
-3. Your password manager
+### Cloudflare Tunnel Security
+- **Quick Tunnel:** Gives you a temporary random URL (`https://<random>.trycloudflare.com`). Keep the URL private; it connects directly to your local Ollama port.
+- **Named Tunnel (Recommended):** Uses a Cloudflare Tunnel credential token (`--token <TUNNEL_TOKEN>`) configured via the Cloudflare Zero Trust dashboard or CLI.
+- **Optional Bearer Token (`ODIN_CHAT_LLM_BEARER_TOKEN`):** If you run a local reverse proxy (like Caddy/Nginx) or Cloudflare Access Service Token in front of Ollama to validate `Authorization: Bearer <token>`, set this secret in Render. If routing directly to Ollama, you can leave it blank.
 
 ---
 
 ## 2. Deploy Backend to Render
 
 1. Go to https://dashboard.render.com → **New +** → **Web Service**
-2. Connect your GitHub repo
+2. Connect your GitHub repository
 3. Configure:
 
 | Field | Value |
 |---|---|
 | Root directory | `backend` |
 | Runtime | Docker |
-| Region | Closest to you (e.g., `Oregon (US West)`) |
+| Region | Closest to you (e.g., `Oregon (US West)` or `Frankfurt (EU Central)`) |
 | Instance type | **Free** |
 | Health check path | `/health` |
 
-4. **Environment Variables** (add each, mark secrets where noted):
+4. **Environment Variables** (add each):
 
-| Key | Value | Secret? |
+| Key | Value | Notes |
 |---|---|---|
-| `ODIN_CHAT_LLM_URL` | *leave blank for now* | No |
-| `ODIN_CHAT_LLM_MODEL` | `qwen3:0.6b` | No |
-| `ODIN_CHAT_LLM_BEARER_TOKEN` | *paste token from Step 1* | **Yes** |
-| `ODIN_CHAT_CORS_ORIGINS` | *leave blank for now* | No |
-| `ODIN_CHAT_LLM_TIMEOUT` | `120` | No |
+| `ODIN_CHAT_LLM_URL` | *leave blank for now* | Will set after starting Cloudflare Tunnel (Step 5) |
+| `ODIN_CHAT_LLM_MODEL` | `qwen2.5:3b` | Must match model pulled in your local Ollama |
+| `ODIN_CHAT_LLM_BEARER_TOKEN` | *optional* | Secret token if using authenticated proxy/Access; leave blank if direct |
+| `ODIN_CHAT_CORS_ORIGINS` | *leave blank for now* | Will set to your Vercel URL after Step 3 |
+| `ODIN_CHAT_LLM_TIMEOUT` | `120` | Timeout in seconds |
+| `ODIN_CHAT_RAG_ENABLED` | `true` | Enables RAG retrieval |
 
 5. Click **Create Web Service** → wait for first deploy (~3-5 min)
 6. Copy the Render URL: `https://<service-name>.onrender.com`
 
-> **Cold start note:** Render free services sleep after 15 min idle. First request after sleep takes 30–50 s.
+> **Cold start note:** Render free services spin down after 15 minutes of inactivity. The first request after sleep takes ~30–50 seconds.
 
 ---
 
 ## 3. Deploy Frontend to Vercel
 
-1. Go to https://vercel.com/new → Import the same GitHub repo
-2. Settings:
+1. Go to https://vercel.com/new → Import the same GitHub repository
+2. Configure settings:
 
 | Field | Value |
 |---|---|
@@ -79,14 +76,14 @@ Save this token — you'll use it in **three places**:
 | Build command | (default) `next build` |
 | Output directory | (default) `.next` |
 
-3. **Environment Variable** (Build-time, **set before first build**):
+3. **Environment Variable** (Build-time, **set before clicking Deploy**):
 
 | Key | Value |
 |---|---|
 | `NEXT_PUBLIC_ODIN_CHAT_API_URL` | `https://<service-name>.onrender.com` (from Step 2) |
 
 4. Click **Deploy** → wait ~2 min
-5. Copy the Vercel URL: `https://<project>.vercel.app`
+5. Copy your assigned Vercel URL: `https://<project>.vercel.app`
 
 ---
 
@@ -95,14 +92,14 @@ Save this token — you'll use it in **three places**:
 1. In Render dashboard → your backend service → **Environment** tab
 2. Update:
    - `ODIN_CHAT_CORS_ORIGINS` = `https://<project>.vercel.app` (from Step 3)
-   - `ODIN_CHAT_LLM_URL` = *will fill after Step 5*
-3. Save → triggers auto-redeploy
+   - `ODIN_CHAT_LLM_URL` = *fill after Step 5*
+3. Save changes → triggers an automatic redeploy
 
 ---
 
-## 5. Laptop: Cloudflare Tunnel
+## 5. Local Machine: Setup Cloudflare Tunnel
 
-### 5.1 Install cloudflared
+### 5.1 Install `cloudflared`
 
 ```bash
 # Linux (Debian/Ubuntu)
@@ -110,33 +107,52 @@ curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
 sudo apt update && sudo apt install -y cloudflared
 
+# Linux (Standalone binary fallback)
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+
 # macOS
 brew install cloudflared
 
 # Windows: Download installer from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 ```
 
-### 5.2 Option A: Quick Tunnel (No Domain, URL Changes on Restart)
+---
+
+### 5.2 Option A: Quick Tunnel (Instant, No Domain Required)
+
+Best for quick testing without owning a domain:
 
 ```bash
-cloudflared tunnel --no-autoupdate --bearer-token "<YOUR_TOKEN>" --url http://localhost:11434
+cloudflared tunnel --url http://localhost:11434
 ```
 
-Output shows: `https://<random>.trycloudflare.com`
+Look for output containing:
+```
+Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):
+https://<random-subdomain>.trycloudflare.com
+```
 
-Copy that URL → Render env var `ODIN_CHAT_LLM_URL` → Save → redeploys.
+1. Copy `https://<random-subdomain>.trycloudflare.com`
+2. Go to Render Dashboard → Environment → Set `ODIN_CHAT_LLM_URL` to this URL → Save.
 
-> ⚠️ **Quick tunnel URL changes every restart.** Only for testing.
+> ⚠️ **Note:** Quick tunnel URLs regenerate whenever you restart the process.
 
-### 5.3 Option B: Named Tunnel (Stable URL, Requires Domain on Cloudflare)
+---
+
+### 5.3 Option B: Named Tunnel (Stable URL, Requires Cloudflare Domain)
+
+Best for a permanent URL:
 
 ```bash
-# One-time setup
-cloudflared tunnel login                    # picks a domain in your Cloudflare account
+# 1. Login to Cloudflare
+cloudflared tunnel login
+
+# 2. Create the tunnel
 cloudflared tunnel create odin-chat
-```
 
-Edit `~/.cloudflared/config.yml`:
+# 3. Create/edit configuration file ~/.cloudflared/config.yml:
+```
 
 ```yaml
 tunnel: odin-chat
@@ -148,30 +164,31 @@ ingress:
 ```
 
 ```bash
+# 4. Route DNS to the tunnel
 cloudflared tunnel route dns odin-chat ollama.yourdomain.com
-```
 
-Run it:
-
-```bash
-cloudflared tunnel --bearer-token "<YOUR_TOKEN>" run odin-chat
+# 5. Run the tunnel
+cloudflared tunnel run odin-chat
 ```
 
 Use `https://ollama.yourdomain.com` as `ODIN_CHAT_LLM_URL` in Render.
 
 ---
 
-## 6. Run the Stack (Every Session)
+## 6. Running the Stack (Daily Workflow)
+
+When you want your deployed assistant to be online:
 
 ```bash
-# Terminal 1
+# Terminal 1: Ollama
 ollama serve
 
-# Terminal 2 (or tmux/screen/systemd)
-cloudflared tunnel --bearer-token "<YOUR_TOKEN>" run odin-chat   # or quick-tunnel command
+# Terminal 2: Cloudflare Tunnel
+cloudflared tunnel --url http://localhost:11434
+# (or for named tunnel: cloudflared tunnel run odin-chat)
 ```
 
-### Optional: systemd User Service (Auto-start on Login)
+### Optional: systemd User Service (Auto-start on Boot)
 
 Create `~/.config/systemd/user/ollama-tunnel.service`:
 
@@ -182,7 +199,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/cloudflared tunnel --bearer-token "<YOUR_TOKEN>" run odin-chat
+ExecStart=/usr/bin/cloudflared tunnel --url http://localhost:11434
 Restart=always
 RestartSec=5
 
@@ -191,7 +208,6 @@ WantedBy=default.target
 ```
 
 Enable & start:
-
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now ollama-tunnel
@@ -201,26 +217,24 @@ systemctl --user enable --now ollama-tunnel
 
 ## 7. End-to-End Verification
 
-Run in order. If any fails, see "Failure Modes" below.
+Run these verification commands in order:
 
 ```bash
-# 1. Local Ollama alive
+# 1. Verify Local Ollama is responsive
 curl -s http://localhost:11434/api/tags | jq '.models[].name'
-# Should list qwen3:0.6b
 
-# 2. Tunnel with token works
-curl -s -H "Authorization: Bearer <TOKEN>" https://ollama.yourdomain.com/api/tags | jq '.models[].name'
-# Without token → HTTP 401
+# 2. Verify Tunnel URL is reachable from internet
+curl -s https://<your-tunnel-url>/api/tags | jq '.models[].name'
 
-# 3. Render backend alive (may take 30-50s on cold start)
-curl -s https://<service>.onrender.com/health
-# {"status":"ok","ollama_available":true,"retrieval_available":true}
+# 3. Verify Render backend health (allow 30-50s if waking from sleep)
+curl -s https://<service-name>.onrender.com/health
+# Expected output: {"status":"ok","ollama_available":true,"retrieval_available":true}
 
-# 4. Frontend loads
-# Open https://<project>.vercel.app in browser
+# 4. Verify Frontend
+# Open https://<project>.vercel.app in your browser
 
-# 5. Full chat round-trip
-# Type "What can you help me with?" → citations + streaming tokens appear
+# 5. Test Live Query
+# Submit "What can you help me with?" in the chat UI and verify streaming responses
 ```
 
 ---
@@ -229,13 +243,12 @@ curl -s https://<service>.onrender.com/health
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| `cloudflared` returns 401 | Token mismatch | Regenerate token, update both `cloudflared --bearer-token` and Render env var |
-| Render health: `ollama_available: false` | Tunnel down / laptop asleep | Wake laptop; check `cloudflared` & `ollama serve` running |
-| Browser CORS error | `ODIN_CHAT_CORS_ORIGINS` not set to Vercel URL | Set it in Render, save → redeploys |
-| First chat hangs ~45s then works | Render cold start (free tier) | Expected. Or ping `/health` every 10 min via cron-job.org |
-| Tunnel URL changed (quick tunnel) | Tunnel restarted | Update Render `ODIN_CHAT_LLM_URL`, redeploy. Switch to named tunnel |
-| `/chat/stream` closes mid-response | Ollama timeout on slow laptop | Bump `ODIN_CHAT_LLM_TIMEOUT` to 180 in Render; lower `max_output_tokens` |
-| Open Library timeout | Rate-limited | Backend already emits `notice` event and continues without citations |
+| Render health: `ollama_available: false` | Tunnel down / laptop asleep / Ollama not running | Start `ollama serve` and `cloudflared tunnel`; check tunnel URL in Render |
+| Browser CORS error | `ODIN_CHAT_CORS_ORIGINS` mismatch in Render | Ensure Render has `https://<project>.vercel.app` without trailing slash |
+| First chat hangs ~45s then works | Render cold start (free tier) | Normal behavior on free tier; keep-alive ping can be set up via free cron-job.org |
+| Model not found error / 503 | `ODIN_CHAT_LLM_MODEL` mismatch | Ensure Render `ODIN_CHAT_LLM_MODEL` matches the exact model name pulled in `ollama list` |
+| `/chat/stream` closes mid-response | Ollama timeout on complex query | Increase `ODIN_CHAT_LLM_TIMEOUT` to `180` in Render |
+| Open Library timeout | Rate-limited | Backend emits `notice` event and proceeds gracefully without citations |
 
 ---
 
@@ -243,45 +256,9 @@ curl -s https://<service>.onrender.com/health
 
 | Layer | Tier | Free Quota |
 |---|---|---|
-| Vercel | Hobby | 100 GB bandwidth/mo, unlimited projects |
-| Render | Free Web Service | 750 hrs/mo, sleeps after 15 min idle |
-| Cloudflare Tunnel | Free | Unlimited tunnels, unlimited bandwidth |
-| Ollama | Your laptop | Free (electricity only) |
-| Open Library | Public | Free, rate-limited |
-| **Total** | | **$0/mo** |
-
----
-
-## 10. Checklist
-
-### One-Time (Do Once)
-- [ ] Generate bearer token (`openssl rand -hex 32`)
-- [ ] Push code changes to GitHub
-- [ ] Create Render Web Service, set env vars
-- [ ] Create Vercel project, set `NEXT_PUBLIC_ODIN_CHAT_API_URL`
-- [ ] Copy Vercel URL → Render `ODIN_CHAT_CORS_ORIGINS`, redeploy
-- [ ] Install `cloudflared` on laptop
-- [ ] Create named tunnel (or quick tunnel), point DNS
-- [ ] Set Render `ODIN_CHAT_LLM_URL` to tunnel URL, redeploy
-
-### Per Session (Every Laptop Reboot)
-- [ ] Start `ollama serve`
-- [ ] Start `cloudflared tunnel --bearer-token "<TOKEN>" run odin-chat`
-
-### Recurring Maintenance
-- **Zero.** Keep laptop awake with tunnel running.
-
----
-
-## 11. Code Changes Already in Repo
-
-The following changes from the deployment plan are **already implemented**:
-
-| File | Change |
-|---|---|
-| `backend/app/config.py` | Added `llm_bearer_token: str = ""` |
-| `backend/app/ollama.py` | Added `_auth_headers()` method, used in `status()` and `stream()` |
-| `backend/app/main.py` | Startup log of Ollama reachability in `lifespan` |
-| `.env.example` | Added `ODIN_CHAT_LLM_BEARER_TOKEN=` line |
-
-No further code changes needed for this deployment.
+| Vercel | Hobby | 100 GB bandwidth/mo, unlimited personal projects |
+| Render | Free Web Service | 750 free instance hours/month |
+| Cloudflare Tunnel | Free | Unlimited tunnels & bandwidth |
+| Ollama | Local Hardware | Free (local compute) |
+| Open Library | Public API | Free, rate-limited |
+| **Total** | | **$0/month** |

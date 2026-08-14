@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1_000)
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     model: str | None = Field(default=None, max_length=100)
+    think: bool = Field(default=False)
 
     @field_validator("message")
     @classmethod
@@ -36,7 +37,7 @@ class Citation(BaseModel):
     language: list[str] = Field(default_factory=list)
     url: str
     cover_url: str | None = None
-    facts: dict[str, str | int | list[str] | None]
+    facts: dict[str, Any] = Field(default_factory=dict)
 
 
 class BookSearchRequest(BaseModel):
@@ -57,3 +58,4 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     ollama_available: bool
     retrieval_available: bool
+    web_search_available: bool = True
